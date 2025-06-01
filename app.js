@@ -281,9 +281,7 @@ app.delete('/events/:id', async (req, res) => {
   }, 1000);
 });
 
-// ROTAS DE AUTH - POR ÚLTIMO
-app.use('/auth', router); // Use prefixo específico ao invés de app.use(router)
-
+app.use(router); 
 // MIDDLEWARE para capturar rotas não encontradas
 app.use('*', (req, res) => {
   console.log(`❌ Rota não encontrada: ${req.method} ${req.originalUrl}`);
