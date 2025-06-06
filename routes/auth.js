@@ -1,68 +1,94 @@
-import express from 'express';
-import { addUser, getUserByEmail } from'../data/user.js';
-import { createJSONToken, isValidPassword } from'../util/auth.js';
-import { isValidEmail, isValidText } from'../util/validation.js';
+import { Router } from 'express';
+import { hash } from 'bcryptjs';
+import { createJSONToken, isValidPassword } from '../util/auth.js';
+import { readData, writeData } from '../util/users.js';
 
-const router = express.Router();
+const router = Router();
 
+// POST /auth/signup
 router.post('/signup', async (req, res, next) => {
   const data = req.body;
-  let errors = {};
+  let { email, password } = data;
 
-  if (!isValidEmail(data.email)) {
-    errors.email = 'Invalid email.';
-  } else {
-    try {
-      const existingUser = await getUserByEmail(data.email);
-      if (existingUser) {
-        errors.email = 'Email exists already.';
-      }
-    } catch (error) {}
-  }
-
-  if (!isValidText(data.password, 6)) {
-    errors.password = 'Invalid password. Must be at least 6 characters long.';
-  }
-
-  if (Object.keys(errors).length > 0) {
+  if (!email || email.trim().length === 0 || !email.includes('@') || 
+      !password || password.trim().length < 7) {
     return res.status(422).json({
-      message: 'User signup failed due to validation errors.',
-      errors,
+      message: 'Invalid input - password should be at least 7 characters long.',
+      errors: {
+        credentials: 'Invalid email or password entered.'
+      }
     });
   }
 
   try {
-    const createdUser = await addUser(data);
-    const authToken = createJSONToken(createdUser.email);
-    res
-      .status(201)
-      .json({ message: 'User created.', user: createdUser, token: authToken });
+    const existingUsers = await readData();
+    
+    if (existingUsers.find(user => user.email === email)) {
+      return res.status(422).json({
+        message: 'User exists already',
+        errors: {
+          credentials: 'User with the email address exists already.'
+        }
+      });
+    }
+
+    const hashedPw = await hash(password, 12);
+    const newUser = {
+      email: email,
+      password: hashedPw
+    };
+    
+    existingUsers.push(newUser);
+    await writeData(existingUsers);
+    
+    const authToken = createJSONToken(email);
+    res.status(201).json({ message: 'User created.', user: { email }, token: authToken });
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/login', async (req, res) => {
-  const email = req.body.email;
-  const password = req.body.password;
+// POST /auth/login
+router.post('/login', async (req, res, next) => {
+  const { email, password } = req.body;
 
-  let user;
-  try {
-    user = await getUserByEmail(email);
-  } catch (error) {
-    return res.status(401).json({ message: 'Authentication failed.' });
-  }
-
-  const pwIsValid = await isValidPassword(password, user.password);
-  if (!pwIsValid) {
+  if (!email || !password) {
     return res.status(422).json({
       message: 'Invalid credentials.',
-      errors: { credentials: 'Invalid email or password entered.' },
+      errors: {
+        credentials: 'Invalid email or password entered.'
+      }
     });
   }
 
-  const token = createJSONToken(email);
-  res.json({ token });
+  try {
+    const existingUsers = await readData();
+    const user = existingUsers.find(user => user.email === email);
+
+    if (!user) {
+      return res.status(422).json({
+        message: 'Invalid credentials.',
+        errors: {
+          credentials: 'Invalid email or password entered.'
+        }
+      });
+    }
+
+    const pwIsValid = await isValidPassword(password, user.password);
+    if (!pwIsValid) {
+      return res.status(422).json({
+        message: 'Invalid credentials.',
+        errors: {
+          credentials: 'Invalid email or password entered.'
+        }
+      });
+    }
+
+    const token = createJSONToken(email);
+    res.json({ message: 'User logged in.', user: { email }, token });
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;
