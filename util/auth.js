@@ -26,7 +26,6 @@ export function checkAuth(req, res, next) {
     return next(new NotAuthError('Not authenticated.'));
   }
   const authFragments = req.headers.authorization.split(' ');
-
   if (authFragments.length !== 2) {
     console.log('NOT AUTH. AUTH HEADER INVALID.');
     return next(new NotAuthError('Not authenticated.'));
@@ -41,5 +40,3 @@ export function checkAuth(req, res, next) {
   }
   next();
 }
-
-
